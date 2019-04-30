@@ -432,13 +432,14 @@ int main(int i, char **c)
 
 	printf("--========= \e[1mPeripherals init\e[0m ===========--\n");
 #ifdef CSR_ETHPHY_CRG_RESET_ADDR
+	printf("Ethernet...\n");
 	eth_init();
 #endif
 #ifdef CSR_SDRAM_BASE
 	sdr_ok = sdrinit();
 #else
 #ifdef MAIN_RAM_TEST
-	sdr_ok = memtest();
+	sdr_ok = memtest();  // hard coded to size of 32k RAM, will fail if less than that...
 #else
 	sdr_ok = 1;
 #endif

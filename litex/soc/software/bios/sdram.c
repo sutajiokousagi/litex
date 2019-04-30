@@ -689,7 +689,7 @@ static int memtest_bus(void)
 }
 
 #ifndef MEMTEST_DATA_SIZE
-#define MEMTEST_DATA_SIZE (2*1024*1024)
+#define MEMTEST_DATA_SIZE (32*1024)
 #endif
 #define MEMTEST_DATA_RANDOM 1
 

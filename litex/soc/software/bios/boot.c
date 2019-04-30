@@ -21,6 +21,16 @@ extern void boot_helper(unsigned int r1, unsigned int r2, unsigned int r3, unsig
 
 static void __attribute__((noreturn)) boot(unsigned int r1, unsigned int r2, unsigned int r3, unsigned int addr)
 {
+  
+#if 0  // turning this on fixes boot with cache flusher
+  unsigned int *i;
+  for( i = (unsigned int *) addr; i < (unsigned int *)(addr + 256); i ++ ) {
+    if( ((unsigned int)i & 0xF) == 0 )
+      printf( "\n%x: ", i );
+    printf( "%08x ", *i);
+  }
+#endif
+
 	printf("Executing booted program at 0x%08x\n", addr);
 	uart_sync();
 	irq_setmask(0);
@@ -29,7 +39,7 @@ static void __attribute__((noreturn)) boot(unsigned int r1, unsigned int r2, uns
 #ifndef __vexriscv__
 	flush_cpu_icache();
 #endif
-	flush_cpu_dcache();
+	//	flush_cpu_dcache();   // I THINK THIS IS CRASHING BOOT NOW! GRR GRR
 #ifdef L2_SIZE
 	flush_l2_cache();
 #endif
