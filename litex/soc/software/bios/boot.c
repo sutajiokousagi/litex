@@ -17,9 +17,9 @@
 #include "sfl.h"
 #include "boot.h"
 
-extern void boot_helper(unsigned int r1, unsigned int r2, unsigned int r3, unsigned int addr);
+extern void boot_helper(unsigned long r1, unsigned long r2, unsigned long r3, unsigned long addr);
 
-static void __attribute__((noreturn)) boot(unsigned int r1, unsigned int r2, unsigned int r3, unsigned int addr)
+static void __attribute__((noreturn)) boot(unsigned long r1, unsigned long r2, unsigned long r3, unsigned long addr)
 {
   
 #if 0  // turning this on fixes boot with cache flusher
@@ -32,6 +32,7 @@ static void __attribute__((noreturn)) boot(unsigned int r1, unsigned int r2, uns
 #endif
 
 	printf("Executing booted program at 0x%08x\n", addr);
+	printf("--============= \e[1mLiftoff!\e[0m ===============--\n");
 	uart_sync();
 	irq_setmask(0);
 	irq_setie(0);
@@ -93,7 +94,6 @@ int serialboot(void)
 {
 	struct sfl_frame frame;
 	int failed;
-	unsigned int cmdline_adr, initrdstart_adr, initrdend_adr;
 	static const char str[SFL_MAGIC_LEN+1] = SFL_MAGIC_REQ;
 	const char *c;
 	int ack_status;
@@ -118,7 +118,6 @@ int serialboot(void)
 	/* assume ACK_OK */
 
 	failed = 0;
-	cmdline_adr = initrdstart_adr = initrdend_adr = 0;
 	while(1) {
 		int i;
 		int actualcrc;
@@ -156,51 +155,27 @@ int serialboot(void)
 
 				failed = 0;
 				writepointer = (char *)(
-					 ((unsigned int)frame.payload[0] << 24)
-					|((unsigned int)frame.payload[1] << 16)
-					|((unsigned int)frame.payload[2] << 8)
-					|((unsigned int)frame.payload[3] << 0));
+					 ((unsigned long)frame.payload[0] << 24)
+					|((unsigned long)frame.payload[1] << 16)
+					|((unsigned long)frame.payload[2] <<  8)
+					|((unsigned long)frame.payload[3] <<  0));
 				for(i=4;i<frame.length;i++)
 					*(writepointer++) = frame.payload[i];
 				uart_write(SFL_ACK_SUCCESS);
 				break;
 			}
 			case SFL_CMD_JUMP: {
-				unsigned int addr;
+				unsigned long addr;
 
 				failed = 0;
-				addr =  ((unsigned int)frame.payload[0] << 24)
-					|((unsigned int)frame.payload[1] << 16)
-					|((unsigned int)frame.payload[2] << 8)
-					|((unsigned int)frame.payload[3] << 0);
+				addr =   ((unsigned long)frame.payload[0] << 24)
+					|((unsigned long)frame.payload[1] << 16)
+					|((unsigned long)frame.payload[2] <<  8)
+					|((unsigned long)frame.payload[3] <<  0);
 				uart_write(SFL_ACK_SUCCESS);
-				boot(cmdline_adr, initrdstart_adr, initrdend_adr, addr);
+				boot(0, 0, 0, addr);
 				break;
 			}
-			case SFL_CMD_CMDLINE:
-				failed = 0;
-				cmdline_adr =  ((unsigned int)frame.payload[0] << 24)
-					      |((unsigned int)frame.payload[1] << 16)
-					      |((unsigned int)frame.payload[2] << 8)
-					      |((unsigned int)frame.payload[3] << 0);
-				uart_write(SFL_ACK_SUCCESS);
-				break;
-			case SFL_CMD_INITRDSTART:
-				failed = 0;
-				initrdstart_adr =  ((unsigned int)frame.payload[0] << 24)
-					          |((unsigned int)frame.payload[1] << 16)
-					          |((unsigned int)frame.payload[2] << 8)
-					          |((unsigned int)frame.payload[3] << 0);
-				uart_write(SFL_ACK_SUCCESS);
-				break;
-			case SFL_CMD_INITRDEND:
-				failed = 0;
-				initrdend_adr =  ((unsigned int)frame.payload[0] << 24)
-					        |((unsigned int)frame.payload[1] << 16)
-					        |((unsigned int)frame.payload[2] << 8)
-					        |((unsigned int)frame.payload[3] << 0);
-				uart_write(SFL_ACK_SUCCESS);
-				break;
 			default:
 				failed++;
 				if(failed == MAX_FAILED) {
@@ -236,7 +211,7 @@ int serialboot(void)
 #endif
 
 static int tftp_get_v(unsigned int ip, unsigned short server_port,
-    const char *filename, char *buffer)
+const char *filename, char *buffer)
 {
 	int r;
 
@@ -253,9 +228,9 @@ static const unsigned char macadr[6] = {0x10, 0xe2, 0xd5, 0x00, 0x00, 0x00};
 void netboot(void)
 {
 	int size;
-	unsigned int cmdline_adr, initrdstart_adr, initrdend_adr;
 	unsigned int ip;
-        unsigned short tftp_port;
+	unsigned long tftp_dst_addr;
+	unsigned short tftp_port;
 
 	printf("Booting from network...\n");
 	printf("Local IP : %d.%d.%d.%d\n", LOCALIP1, LOCALIP2, LOCALIP3, LOCALIP4);
@@ -268,43 +243,72 @@ void netboot(void)
 	tftp_port = TFTP_SERVER_PORT;
 	printf("Fetching from: UDP/%d\n", tftp_port);
 
-	size = tftp_get_v(ip, tftp_port, "boot.bin", (void *)MAIN_RAM_BASE);
-
-	if ((size <= 0) && (tftp_port != DEFAULT_TFTP_SERVER_PORT)) {
-		/* Try default TFTP port if timed out on non-standard port */
-		tftp_port = DEFAULT_TFTP_SERVER_PORT;
-		printf("Fetching from: UDP/%d\n", tftp_port);
-
-		size = tftp_get_v(ip, tftp_port, "boot.bin",
-			(void *)MAIN_RAM_BASE);
-        }
-
-        if (size <= 0) {
+#ifdef NETBOOT_LINUX_VEXRISCV
+	tftp_dst_addr = MAIN_RAM_BASE;
+	size = tftp_get_v(ip, tftp_port, "Image", (void *)tftp_dst_addr);
+	if (size <= 0) {
 		printf("Network boot failed\n");
 		return;
 	}
 
-	cmdline_adr = MAIN_RAM_BASE+0x1000000;
-	size = tftp_get_v(ip, tftp_port, "cmdline.txt", (void *)cmdline_adr);
+	tftp_dst_addr = MAIN_RAM_BASE + 0x00800000;
+	size = tftp_get_v(ip, tftp_port, "rootfs.cpio", (void *)tftp_dst_addr);
 	if(size <= 0) {
-		printf("No command line parameters found\n");
-		cmdline_adr = 0;
-	} else
-		*((char *)(cmdline_adr+size)) = 0x00;
+		printf("No rootfs.cpio found\n");
+		return;
+	}
 
-	initrdstart_adr = MAIN_RAM_BASE+0x1002000;
-	size = tftp_get_v(ip, tftp_port, "initrd.bin", (void *)initrdstart_adr);
+	tftp_dst_addr = MAIN_RAM_BASE + 0x01000000;
+	size = tftp_get_v(ip, tftp_port, "rv32.dtb", (void *)tftp_dst_addr);
 	if(size <= 0) {
-		printf("No initial ramdisk found\n");
-		initrdstart_adr = 0;
-		initrdend_adr = 0;
-	} else
-		initrdend_adr = initrdstart_adr + size;
+		printf("No rv32.dtb found\n");
+		return;
+	}
 
-	boot(cmdline_adr, initrdstart_adr, initrdend_adr, MAIN_RAM_BASE);
+	tftp_dst_addr = EMULATOR_RAM_BASE;
+	size = tftp_get_v(ip, tftp_port, "emulator.bin", (void *)tftp_dst_addr);
+	if(size <= 0) {
+		printf("No emulator.bin found\n");
+		return;
+	}
+
+	boot(0, 0, 0, EMULATOR_RAM_BASE);
+#else
+	tftp_dst_addr = MAIN_RAM_BASE;
+	size = tftp_get_v(ip, tftp_port, "boot.bin", (void *)tftp_dst_addr);
+	if (size <= 0) {
+		printf("Network boot failed\n");
+		return;
+	}
+
+	boot(0, 0, 0, MAIN_RAM_BASE);
+#endif
+
 }
 
 #endif
+
+#ifdef FLASHBOOT_LINUX_VEXRISCV
+
+/* TODO: add configurable flash mapping, improve integration */
+
+void flashboot(void)
+{
+	printf("Loading Image from flash...\n");
+	memcpy((void *)MAIN_RAM_BASE + 0x00000000, (void *)0x50400000, 0x400000);
+
+	printf("Loading rootfs.cpio from flash...\n");
+	memcpy((void *)MAIN_RAM_BASE + 0x00800000, (void *)0x50800000, 0x700000);
+
+	printf("Loading rv32.dtb from flash...\n");
+	memcpy((void *)MAIN_RAM_BASE + 0x01000000, (void *)0x50f00000, 0x001000);
+
+	printf("Loading emulator.bin from flash...\n");
+	memcpy((void *)EMULATOR_RAM_BASE + 0x00000000, (void *)0x50f80000, 0x004000);
+
+	boot(0, 0, 0, EMULATOR_RAM_BASE);
+}
+#else
 
 #ifdef FLASH_BOOT_ADDRESS
 
@@ -346,6 +350,8 @@ void flashboot(void)
 	}
 	boot(0, 0, 0, FIRMWARE_BASE_ADDRESS);
 }
+#endif
+
 #endif
 
 #ifdef ROM_BOOT_ADDRESS

@@ -95,7 +95,10 @@ def get_migen_git_revision():
     import migen
     d = os.getcwd()
     os.chdir(os.path.dirname(migen.__file__))
-    r = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])[:-1].decode("utf-8")
+    try:
+        r = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])[:-1].decode("utf-8")
+    except:
+        r = "--------"
     os.chdir(d)
     return r
 
@@ -103,7 +106,10 @@ def get_litex_git_revision():
     import litex
     d = os.getcwd()
     os.chdir(os.path.dirname(litex.__file__))
-    r = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])[:-1].decode("utf-8")
+    try:
+        r = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])[:-1].decode("utf-8")
+    except:
+        r = "--------"
     os.chdir(d)
     return r
 
@@ -115,3 +121,8 @@ def generated_banner(line_comment="//"):
     r += "{}\n".format(datetime.datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S"))
     r += line_comment + "-"*80 + "\n"
     return r
+
+
+def deprecated_warning(msg):
+    print("[WARNING] Deprecated, please update " + msg)
+    time.sleep(2) # annoy user to force update :)
