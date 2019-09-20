@@ -1,5 +1,21 @@
+# This file is Copyright (c) 2013-2014 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2014-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2018 Dolu1990 <charles.papon.90@gmail.com>
+# This file is Copyright (c) 2019 Gabriel L. Somlo <gsomlo@gmail.com>
+# This file is Copyright (c) 2018 Jean-François Nguyen <jf@lambdaconcept.fr>
+# This file is Copyright (c) 2019 Mateusz Holenko <mholenko@antmicro.com>
+# This file is Copyright (c) 2013 Robert Jordens <jordens@gmail.com>
+# This file is Copyright (c) 2018 Sean Cross <sean@xobs.io>
+# This file is Copyright (c) 2018 Sergiusz Bazanski <q3k@q3k.org>
+# This file is Copyright (c) 2018-2016 Tim 'mithro' Ansell <me@mith.ro>
+# This file is Copyright (c) 2015 whitequark <whitequark@whitequark.org>
+# This file is Copyright (c) 2018 William D. Jones <thor0505@comcast.net>
+# License: BSD
+
 import os
+import json
 from shutil import which
+from sysconfig import get_platform
 
 from migen import *
 
@@ -7,7 +23,14 @@ from litex.soc.interconnect.csr import CSRStatus
 
 from litex.build.tools import generated_banner
 
-def get_cpu_mak(cpu):
+# FIXME: use OrderedDict for constants?
+def get_constant(name, constants):
+    for n, v in constants:
+        if n == name:
+            return v
+    return None
+
+def get_cpu_mak(cpu, compile_software):
     # select between clang and gcc
     clang = os.getenv("CLANG", "")
     if clang != "":
@@ -36,12 +59,19 @@ def get_cpu_mak(cpu):
         r = None
         if not isinstance(triple, tuple):
             triple = (triple,)
+        p = get_platform()
         for i in range(len(triple)):
             t = triple[i]
+            # use native toolchain if host and target platforms are the same
+            if t == 'riscv64-unknown-elf' and p == 'linux-riscv64':
+                r = '--native--'
+                break
             if which(t+"-gcc"):
                 r = t
                 break
         if r is None:
+            if not compile_software:
+                return "--not-found--"
             msg = "Unable to find any of the cross compilation toolchains:\n"
             for i in range(len(triple)):
                 msg += "- " + triple[i] + "\n"
@@ -70,18 +100,20 @@ def get_linker_regions(regions):
     return r
 
 
-def get_mem_header(regions, flash_boot_address):
+def get_mem_header(regions, flash_boot_address, shadow_base):
     r = generated_banner("//")
     r += "#ifndef __GENERATED_MEM_H\n#define __GENERATED_MEM_H\n\n"
     for name, base, size in regions:
         r += "#define {name}_BASE 0x{base:08x}L\n#define {name}_SIZE 0x{size:08x}\n\n".format(name=name.upper(), base=base, size=size)
     if flash_boot_address is not None:
         r += "#define FLASH_BOOT_ADDRESS 0x{:08x}L\n\n".format(flash_boot_address)
+    if shadow_base is not None:
+        r += "#define SHADOW_BASE 0x{:08x}L\n\n".format(shadow_base)
     r += "#endif\n"
     return r
 
 
-def _get_rw_functions_c(reg_name, reg_base, nwords, busword, read_only, with_access_functions):
+def _get_rw_functions_c(reg_name, reg_base, nwords, busword, alignment, read_only, with_access_functions):
     r = ""
 
     r += "#define CSR_"+reg_name.upper()+"_ADDR "+hex(reg_base)+"L\n"
@@ -104,7 +136,7 @@ def _get_rw_functions_c(reg_name, reg_base, nwords, busword, read_only, with_acc
         if size > 1:
             r += "\t"+ctype+" r = csr_readl("+hex(reg_base)+"L);\n"
             for byte in range(1, nwords):
-                r += "\tr <<= "+str(busword)+";\n\tr |= csr_readl("+hex(reg_base+4*byte)+"L);\n"
+                r += "\tr <<= "+str(busword)+";\n\tr |= csr_readl("+hex(reg_base+alignment//8*byte)+"L);\n"
             r += "\treturn r;\n}\n"
         else:
             r += "\treturn csr_readl("+hex(reg_base)+"L);\n}\n"
@@ -117,12 +149,13 @@ def _get_rw_functions_c(reg_name, reg_base, nwords, busword, read_only, with_acc
                     value_shifted = "value >> "+str(shift)
                 else:
                     value_shifted = "value"
-                r += "\tcsr_writel("+value_shifted+", "+hex(reg_base+4*word)+"L);\n"
+                r += "\tcsr_writel("+value_shifted+", "+hex(reg_base+alignment//8*word)+"L);\n"
             r += "}\n"
     return r
 
 
 def get_csr_header(regions, constants, with_access_functions=True, with_shadow_base=True, shadow_base=0x80000000):
+    alignment = get_constant("CONFIG_CSR_ALIGNMENT", constants)
     r = generated_banner("//")
     r += "#ifndef __GENERATED_CSR_H\n#define __GENERATED_CSR_H\n"
     if with_access_functions:
@@ -145,8 +178,13 @@ def get_csr_header(regions, constants, with_access_functions=True, with_shadow_b
         if not isinstance(obj, Memory):
             for csr in obj:
                 nr = (csr.size + busword - 1)//busword
-                r += _get_rw_functions_c(name + "_" + csr.name, origin, nr, busword, isinstance(csr, CSRStatus), with_access_functions)
-                origin += 4*nr
+                r += _get_rw_functions_c(name + "_" + csr.name, origin, nr, busword, alignment,
+                    isinstance(csr, CSRStatus), with_access_functions)
+                origin += alignment//8*nr
+                if hasattr(csr, "fields"):
+                    for field in csr.fields.fields:
+                        r += "#define CSR_"+name.upper()+"_"+csr.name.upper()+"_"+field.name.upper()+"_OFFSET "+str(field.offset)+"\n"
+                        r += "#define CSR_"+name.upper()+"_"+csr.name.upper()+"_"+field.name.upper()+"_SIZE "+str(field.size)+"\n"
 
     r += "\n/* constants */\n"
     for name, value in constants:
@@ -167,27 +205,62 @@ def get_csr_header(regions, constants, with_access_functions=True, with_shadow_b
     r += "\n#endif\n"
     return r
 
+def get_csr_json(csr_regions=[], constants=[], memory_regions=[]):
+    alignment = 32 if constants is None else get_constant("CONFIG_CSR_ALIGNMENT", constants)
 
-def get_csr_csv(csr_regions=None, constants=None, memory_regions=None):
+    d = {
+        "csr_bases":     {},
+        "csr_registers": {},
+        "constants":     {},
+        "memories":      {},
+    }
+
+    for name, origin, busword, obj in csr_regions:
+        d["csr_bases"][name] = origin
+        if not isinstance(obj, Memory):
+            for csr in obj:
+                size = (csr.size + busword - 1)//busword
+                d["csr_registers"][name + "_" + csr.name] = {
+                    "addr": origin,
+                    "size": size,
+                    "type": "ro" if isinstance(csr, CSRStatus) else "rw"
+                }
+                origin += alignment//8*size
+
+    for name, value in constants:
+        d["constants"][name.lower()] = value.lower() if isinstance(value, str) else value
+
+    for name, origin, length in memory_regions:
+        d["memories"][name.lower()] = {
+            "base": origin,
+            "size": length
+        }
+
+    return json.dumps(d, indent=4)
+
+def get_csr_csv(csr_regions=[], constants=[], memory_regions=[]):
+    d = json.loads(get_csr_json(csr_regions, constants, memory_regions))
     r = generated_banner("#")
+    for name, value in d["csr_bases"].items():
+        r += "csr_base,{},0x{:08x},,\n".format(name, value)
+    for name in d["csr_registers"].keys():
+        r += "csr_register,{},0x{:08x},{},{}\n".format(name,
+            d["csr_registers"][name]["addr"],
+            d["csr_registers"][name]["size"],
+            d["csr_registers"][name]["type"])
+    for name, value in d["constants"].items():
+        r += "constant,{},{},,\n".format(name, value)
+    for name in d["memories"].keys():
+        r += "memory_region,{},0x{:08x},{:d},\n".format(name,
+            d["memories"][name]["base"],
+            d["memories"][name]["size"])
+    return r
 
-    if csr_regions is not None:
-        for name, origin, busword, obj in csr_regions:
-            r += "csr_base,{},0x{:08x},,\n".format(name, origin)
-
-        for name, origin, busword, obj in csr_regions:
-            if not isinstance(obj, Memory):
-                for csr in obj:
-                    nr = (csr.size + busword - 1)//busword
-                    r += "csr_register,{}_{},0x{:08x},{},{}\n".format(name, csr.name, origin, nr, "ro" if isinstance(csr, CSRStatus) else "rw")
-                    origin += 4*nr
-
-    if constants is not None:
-        for name, value in constants:
-            r += "constant,{},{},,\n".format(name.lower(), value)
-
-    if memory_regions is not None:
-        for name, origin, length in memory_regions:
-            r += "memory_region,{},0x{:08x},{:d},\n".format(name.lower(), origin, length)
-
+def get_git_header():
+    from litex.build.tools import get_migen_git_revision, get_litex_git_revision
+    r = generated_banner("//")
+    r += "#ifndef __GENERATED_GIT_H\n#define __GENERATED_GIT_H\n\n"
+    r += "#define MIGEN_GIT_SHA1 \"{}\"\n".format(get_migen_git_revision())
+    r += "#define LITEX_GIT_SHA1 \"{}\"\n".format(get_litex_git_revision())
+    r += "#endif\n"
     return r

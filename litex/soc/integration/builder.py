@@ -1,3 +1,13 @@
+# This file is Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2019 Mateusz Holenko <mholenko@antmicro.com>
+# This file is Copyright (c) 2018 Peter Gielda <pgielda@antmicro.com>
+# This file is Copyright (c) 2018 Sergiusz Bazanski <q3k@q3k.org>
+# This file is Copyright (c) 2016-2017 Tim 'mithro' Ansell <mithro@mithis.com>
+# This file is Copyright (c) 2018 William D. Jones <thor0505@comcast.net>
+# License: BSD
+
+
 import os
 import subprocess
 import struct
@@ -6,7 +16,7 @@ import shutil
 from litex.build.tools import write_to_file
 from litex.soc.integration import cpu_interface, soc_core, soc_sdram
 
-from litedram import sdram_init
+from litedram.init import get_sdram_phy_c_header
 
 __all__ = ["soc_software_packages", "soc_directory",
            "Builder", "builder_args", "builder_argdict"]
@@ -31,7 +41,7 @@ class Builder:
     def __init__(self, soc, output_dir=None,
                  compile_software=True, compile_gateware=True,
                  gateware_toolchain_path=None,
-                 csr_csv=None):
+                 csr_json=None, csr_csv=None):
         self.soc = soc
         if output_dir is None:
             output_dir = "soc_{}_{}".format(
@@ -44,6 +54,7 @@ class Builder:
         self.compile_gateware = compile_gateware
         self.gateware_toolchain_path = gateware_toolchain_path
         self.csr_csv = csr_csv
+        self.csr_json = csr_json
 
         self.software_packages = []
         for name in soc_software_packages:
@@ -58,6 +69,7 @@ class Builder:
         cpu_type = self.soc.cpu_type
         memory_regions = self.soc.get_memory_regions()
         flash_boot_address = getattr(self.soc, "flash_boot_address", None)
+        shadow_base = getattr(self.soc, "shadow_base", None)
         csr_regions = self.soc.get_csr_regions()
         constants = self.soc.get_constants()
 
@@ -68,7 +80,7 @@ class Builder:
         variables_contents = []
         def define(k, v):
             variables_contents.append("{}={}\n".format(k, _makefile_escape(v)))
-        for k, v in cpu_interface.get_cpu_mak(self.soc.cpu):
+        for k, v in cpu_interface.get_cpu_mak(self.soc.cpu, self.compile_software):
             define(k, v)
         # Distinguish between LiteX and MiSoC.
         define("LITEX", "1")
@@ -92,39 +104,53 @@ class Builder:
         write_to_file(
             os.path.join(generated_dir, "variables.mak"),
             "".join(variables_contents))
-
         write_to_file(
             os.path.join(generated_dir, "output_format.ld"),
             cpu_interface.get_linker_output_format(self.soc.cpu))
         write_to_file(
             os.path.join(generated_dir, "regions.ld"),
             cpu_interface.get_linker_regions(memory_regions))
-
         write_to_file(
             os.path.join(generated_dir, "mem.h"),
-            cpu_interface.get_mem_header(memory_regions, flash_boot_address))
+            cpu_interface.get_mem_header(memory_regions, flash_boot_address, shadow_base))
         write_to_file(
             os.path.join(generated_dir, "csr.h"),
             cpu_interface.get_csr_header(csr_regions, constants))
+        write_to_file(
+            os.path.join(generated_dir, "git.h"),
+            cpu_interface.get_git_header()
+        )
 
         if isinstance(self.soc, soc_sdram.SoCSDRAM):
             if hasattr(self.soc, "sdram"):
                 write_to_file(
                     os.path.join(generated_dir, "sdram_phy.h"),
-                    sdram_init.get_sdram_phy_c_header(
+                    get_sdram_phy_c_header(
                         self.soc.sdram.controller.settings.phy,
                         self.soc.sdram.controller.settings.timing))
 
-    def _generate_csr_csv(self):
+    def _generate_csr_map(self, csr_json=None, csr_csv=None):
         memory_regions = self.soc.get_memory_regions()
         csr_regions = self.soc.get_csr_regions()
         constants = self.soc.get_constants()
 
-        csr_dir = os.path.dirname(os.path.realpath(self.csr_csv))
-        os.makedirs(csr_dir, exist_ok=True)
-        write_to_file(
-            self.csr_csv,
-            cpu_interface.get_csr_csv(csr_regions, constants, memory_regions))
+        shadow_base = getattr(self.soc, "shadow_base", None)
+        if shadow_base:
+            constants.append(('shadow_base',  shadow_base))
+
+        flash_boot_address = getattr(self.soc, "flash_boot_address", None)
+        if flash_boot_address:
+            constants.append(('flash_boot_address',  flash_boot_address))
+
+        if csr_json is not None:
+            csr_dir = os.path.dirname(os.path.realpath(csr_json))
+            os.makedirs(csr_dir, exist_ok=True)
+            write_to_file(csr_json, cpu_interface.get_csr_json(csr_regions, constants, memory_regions))
+
+        if csr_csv is not None:
+            csr_dir = os.path.dirname(os.path.realpath(csr_csv))
+            os.makedirs(csr_dir, exist_ok=True)
+            write_to_file(csr_csv, cpu_interface.get_csr_csv(csr_regions, constants, memory_regions))
 
     def _prepare_software(self):
         for name, src_dir in self.software_packages:
@@ -159,8 +185,7 @@ class Builder:
                 if not self.soc.integrated_rom_initialized:
                     self._initialize_rom()
 
-        if self.csr_csv is not None:
-            self._generate_csr_csv()
+        self._generate_csr_map(self.csr_json, self.csr_csv)
 
         if self.gateware_toolchain_path is not None:
             toolchain_path = self.gateware_toolchain_path
@@ -169,6 +194,7 @@ class Builder:
             kwargs["run"] = self.compile_gateware
         vns = self.soc.build(build_dir=os.path.join(self.output_dir, "gateware"),
                              toolchain_path=toolchain_path, **kwargs)
+        self.soc.do_exit(vns=vns)
         return vns
 
 
@@ -187,6 +213,9 @@ def builder_args(parser):
                              "installation path")
     parser.add_argument("--csr-csv", default=None,
                         help="store CSR map in CSV format into the "
+                             "specified file")
+    parser.add_argument("--csr-json", default=None,
+                        help="store CSR map in JSON format into the "
                              "specified file")
 
 

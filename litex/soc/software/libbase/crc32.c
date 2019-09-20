@@ -5,6 +5,7 @@
 
 #include <crc.h>
 
+#ifndef SMALL_CRC
 static const unsigned int crc_table[256] = {
 	0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL, 0x076dc419L,
 	0x706af48fL, 0xe963a535L, 0x9e6495a3L, 0x0edb8832L, 0x79dcb8a4L,
@@ -79,3 +80,22 @@ unsigned int crc32(const unsigned char *buffer, unsigned int len)
 	} while(--len);
 	return crc ^ 0xffffffffL;
 }
+#else
+unsigned int crc32(const unsigned char *message, unsigned int len) {
+   int i, j;
+   unsigned int byte, crc, mask;
+
+   i = 0;
+   crc = 0xFFFFFFFF;
+   while (i < len) {
+      byte = message[i];            // Get next byte.
+      crc = crc ^ byte;
+      for (j = 7; j >= 0; j--) {    // Do eight times.
+         mask = -(crc & 1);
+         crc = (crc >> 1) ^ (0xEDB88320 & mask);
+      }
+      i = i + 1;
+   }
+   return ~crc;
+}
+#endif

@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2013 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litex.build.generic_platform import *
@@ -79,7 +79,7 @@ _io = [
 
 class Platform(LatticePlatform):
     default_clk_name = "clk100"
-    default_clk_period = 10
+    default_clk_period = 1e9/100e6
 
     def __init__(self):
         LatticePlatform.__init__(self, "LFE3-35EA-6FN484C", _io)

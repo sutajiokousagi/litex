@@ -1,3 +1,18 @@
+// This file is Copyright (c) 2013-2014 Sebastien Bourdeauducq <sb@m-labs.hk>
+// This file is Copyright (c) 2014-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+// This file is Copyright (c) 2015 Yann Sionneau <ys@m-labs.hk>
+// This file is Copyright (c) 2015 whitequark <whitequark@whitequark.org>
+// This file is Copyright (c) 2019 Ambroz Bizjak <ambrop7@gmail.com>
+// This file is Copyright (c) 2019 Caleb Jamison <cbjamo@gmail.com>
+// This file is Copyright (c) 2018 Dolu1990 <charles.papon.90@gmail.com>
+// This file is Copyright (c) 2018 Felix Held <felix-github@felixheld.de>
+// This file is Copyright (c) 2019 Gabriel L. Somlo <gsomlo@gmail.com>
+// This file is Copyright (c) 2018 Jean-François Nguyen <jf@lambdaconcept.fr>
+// This file is Copyright (c) 2018 Sergiusz Bazanski <q3k@q3k.org>
+// This file is Copyright (c) 2016 Tim 'mithro' Ansell <mithro@mithis.com>
+
+// License: BSD
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <console.h>
@@ -10,9 +25,18 @@
 
 #include <generated/csr.h>
 #include <generated/mem.h>
+#include <generated/git.h>
 
 #ifdef CSR_ETHMAC_BASE
 #include <net/microudp.h>
+#endif
+
+#ifdef CSR_SPIFLASH_BASE
+#include <spiflash.h>
+#endif
+
+#ifdef CSR_ETHPHY_MDIO_W_ADDR
+#include <mdio.h>
 #endif
 
 #include "sdram.h"
@@ -154,6 +178,127 @@ static void mc(char *dstaddr, char *srcaddr, char *count)
 	for (i=0;i<count2;i++) *dstaddr2++ = *srcaddr2++;
 }
 
+#if (defined CSR_SPIFLASH_BASE && defined SPIFLASH_PAGE_SIZE)
+static void fw(char *addr, char *value, char *count)
+{
+	char *c;
+	unsigned int addr2;
+	unsigned int value2;
+	unsigned int count2;
+	unsigned int i;
+
+	if((*addr == 0) || (*value == 0)) {
+		printf("fw <offset> <value> [count]\n");
+		return;
+	}
+	addr2 = strtoul(addr, &c, 0);
+	if(*c != 0) {
+		printf("incorrect offset\n");
+		return;
+	}
+	value2 = strtoul(value, &c, 0);
+	if(*c != 0) {
+		printf("incorrect value\n");
+		return;
+	}
+	if(*count == 0) {
+		count2 = 1;
+	} else {
+		count2 = strtoul(count, &c, 0);
+		if(*c != 0) {
+			printf("incorrect count\n");
+			return;
+		}
+	}
+	for (i=0;i<count2;i++) write_to_flash(addr2, (unsigned char *)&value2, 4);
+}
+#endif
+
+#ifdef CSR_ETHPHY_MDIO_W_ADDR
+static void mdiow(char *phyadr, char *reg, char *val)
+{
+	char *c;
+	unsigned int phyadr2;
+	unsigned int reg2;
+	unsigned int val2;
+
+	if((*phyadr == 0) || (*reg == 0) || (*val == 0)) {
+		printf("mdiow <phyadr> <reg> <value>\n");
+		return;
+	}
+	phyadr2 = strtoul(phyadr, &c, 0);
+	if(*c != 0) {
+		printf("incorrect phyadr\n");
+		return;
+	}
+	reg2 = strtoul(reg, &c, 0);
+	if(*c != 0) {
+		printf("incorrect reg\n");
+		return;
+	}
+	val2 = strtoul(val, &c, 0);
+	if(*c != 0) {
+		printf("incorrect val\n");
+		return;
+	}
+	mdio_write(phyadr2, reg2, val2);
+}
+
+static void mdior(char *phyadr, char *reg)
+{
+	char *c;
+	unsigned int phyadr2;
+	unsigned int reg2;
+	unsigned int val;
+
+	if((*phyadr == 0) || (*reg == 0)) {
+		printf("mdior <phyadr> <reg>\n");
+		return;
+	}
+	phyadr2 = strtoul(phyadr, &c, 0);
+	if(*c != 0) {
+		printf("incorrect phyadr\n");
+		return;
+	}
+	reg2 = strtoul(reg, &c, 0);
+	if(*c != 0) {
+		printf("incorrect reg\n");
+		return;
+	}
+	val = mdio_read(phyadr2, reg2);
+	printf("reg %d: 0x%04x\n", reg2, val);
+}
+
+static void mdiod(char *phyadr, char *count)
+{
+	char *c;
+	unsigned int phyadr2;
+	unsigned int count2;
+	unsigned int val;
+	int i;
+
+	if((*phyadr == 0) || (*count == 0)) {
+		printf("mdiod <phyadr> <count>\n");
+		return;
+	}
+	phyadr2 = strtoul(phyadr, &c, 0);
+	if(*c != 0) {
+		printf("incorrect phyadr\n");
+		return;
+	}
+	count2 = strtoul(count, &c, 0);
+	if(*c != 0) {
+		printf("incorrect count\n");
+		return;
+	}
+	printf("MDIO dump @0x%x:\n", phyadr2);
+	for (i=0; i<count2; i++) {
+		val = mdio_read(phyadr2, i);
+		printf("reg %d: 0x%04x\n", i, val);
+	}
+}
+#endif
+
 static void crc(char *startaddr, char *len)
 {
 	char *c;
@@ -194,6 +339,14 @@ static void help(void)
 	puts("mr         - read address space");
 	puts("mw         - write address space");
 	puts("mc         - copy address space");
+#if (defined CSR_SPIFLASH_BASE && defined SPIFLASH_PAGE_SIZE)
+	puts("fw         - write to flash");
+#endif
+#ifdef CSR_ETHPHY_MDIO_W_ADDR
+	puts("mdiow      - write MDIO register");
+	puts("mdior      - read MDIO register");
+	puts("mdiod      - dump MDIO registers");
+#endif
 	puts("");
 	puts("crc        - compute CRC32 of a part of the address space");
 	puts("ident      - display identifier");
@@ -249,10 +402,18 @@ static void do_command(char *c)
 	if(strcmp(token, "mr") == 0) mr(get_token(&c), get_token(&c));
 	else if(strcmp(token, "mw") == 0) mw(get_token(&c), get_token(&c), get_token(&c));
 	else if(strcmp(token, "mc") == 0) mc(get_token(&c), get_token(&c), get_token(&c));
+#if (defined CSR_SPIFLASH_BASE && defined SPIFLASH_PAGE_SIZE)
+	else if(strcmp(token, "fw") == 0) fw(get_token(&c), get_token(&c), get_token(&c));
+#endif
+#ifdef CSR_ETHPHY_MDIO_W_ADDR
+	else if(strcmp(token, "mdiow") == 0) mdiow(get_token(&c), get_token(&c), get_token(&c));
+	else if(strcmp(token, "mdior") == 0) mdior(get_token(&c), get_token(&c));
+	else if(strcmp(token, "mdiod") == 0) mdiod(get_token(&c), get_token(&c));
+#endif
 	else if(strcmp(token, "crc") == 0) crc(get_token(&c), get_token(&c));
 	else if(strcmp(token, "ident") == 0) ident();
 
-#ifdef L2_SIZE
+#ifdef CONFIG_L2_SIZE
 	else if(strcmp(token, "flushl2") == 0) flush_l2_cache();
 #endif
 #ifdef CSR_CTRL_BASE
@@ -403,7 +564,9 @@ int main(int i, char **c)
 	printf(" BIOS built on "__DATE__" "__TIME__"\n");
 	crcbios();
 	printf("\n");
-
+	printf(" Migen git sha1: "MIGEN_GIT_SHA1"\n");
+	printf(" LiteX git sha1: "LITEX_GIT_SHA1"\n");
+	printf("\n");
 	printf("--============ \e[1mSoC info\e[0m ================--\n");
 	printf("\e[1mCPU\e[0m:       ");
 #ifdef __lm32__
@@ -421,11 +584,11 @@ int main(int i, char **c)
 #else
 	printf("Unknown");
 #endif
-	printf(" @ %dMHz\n", SYSTEM_CLOCK_FREQUENCY/1000000);
+	printf(" @ %dMHz\n", CONFIG_CLOCK_FREQUENCY/1000000);
 	printf("\e[1mROM\e[0m:       %dKB\n", ROM_SIZE/1024);
 	printf("\e[1mSRAM\e[0m:      %dKB\n", SRAM_SIZE/1024);
-#ifdef L2_SIZE
-	printf("\e[1mL2\e[0m:        %dKB\n", L2_SIZE/1024);
+#ifdef CONFIG_L2_SIZE
+	printf("\e[1mL2\e[0m:        %dKB\n", CONFIG_L2_SIZE/1024);
 #endif
 #ifdef MAIN_RAM_SIZE
 	printf("\e[1mMAIN-RAM\e[0m:  %dKB\n", MAIN_RAM_SIZE/1024);
@@ -433,7 +596,7 @@ int main(int i, char **c)
 	printf("\n");
 
 	printf("--========= \e[1mPeripherals init\e[0m ===========--\n");
-#ifdef CSR_ETHPHY_CRG_RESET_ADDR
+#ifdef CSR_ETHMAC_BASE
 	printf("Ethernet...\n");
 	eth_init();
 #endif
@@ -458,7 +621,7 @@ int main(int i, char **c)
 
 	printf("--============= \e[1mConsole\e[0m ================--\n");
 	while(1) {
-		putsnonl("\e[1mBIOS>\e[0m ");
+		putsnonl("\e[92;1mlitex\e[0m> ");
 		readstr(buffer, 64);
 		do_command(buffer);
 	}

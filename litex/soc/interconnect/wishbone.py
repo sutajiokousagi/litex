@@ -1,3 +1,8 @@
+# This file is Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2018 Tim 'mithro' Ansell <me@mith.ro>
+# License: BSD
+
 from functools import reduce
 from operator import or_
 
@@ -284,6 +289,15 @@ class DownConverter(Module):
             If(read & counter_ce,
                 cached_data.eq(master.dat_r)
             )
+
+
+@ResetInserter()
+@CEInserter()
+class FlipFlop(Module):
+    def __init__(self, *args, **kwargs):
+        self.d = Signal(*args, **kwargs)
+        self.q = Signal(*args, **kwargs)
+        self.sync += self.q.eq(self.d)
 
 
 class UpConverter(Module):
@@ -648,7 +662,8 @@ class SRAM(Module):
         ###
 
         # memory
-        port = self.mem.get_port(write_capable=not read_only, we_granularity=8)
+        port = self.mem.get_port(write_capable=not read_only, we_granularity=8,
+            mode=READ_FIRST if read_only else WRITE_FIRST)
         self.specials += self.mem, port
         # generate write enable signal
         if not read_only:

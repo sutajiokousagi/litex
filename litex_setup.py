@@ -9,17 +9,24 @@ current_path = os.path.dirname(os.path.realpath(__file__))
 
 # name,  (url, recursive clone, develop)
 repos = [
-    ("migen",      ("http://github.com/m-labs/",        True,  True)),
-    ("litex",      ("http://github.com/enjoy-digital/", True,  True)),
-    ("liteeth",    ("http://github.com/enjoy-digital/", False, True)),
-    ("liteusb",    ("http://github.com/enjoy-digital/", False, True)),
-    ("litedram",   ("http://github.com/enjoy-digital/", False, True)),
-    ("litepcie",   ("http://github.com/enjoy-digital/", False, True)),
-    ("litesata",   ("http://github.com/enjoy-digital/", False, True)),
-    ("litesdcard", ("http://github.com/enjoy-digital/", False, True)),
-    ("liteiclink", ("http://github.com/enjoy-digital/", False, True)),
-    ("litevideo",  ("http://github.com/enjoy-digital/", False, True)),
-    ("litescope",  ("http://github.com/enjoy-digital/", False, True)),
+    # HDL
+    ("migen",      ("https://github.com/m-labs/",        True,  True)),
+
+    # LiteX SoC builder
+    ("litex",      ("https://github.com/enjoy-digital/", True,  True)),
+
+    # LiteX cores ecosystem
+    ("liteeth",    ("https://github.com/enjoy-digital/", False, True)),
+    ("litedram",   ("https://github.com/enjoy-digital/", False, True)),
+    ("litepcie",   ("https://github.com/enjoy-digital/", False, True)),
+    ("litesata",   ("https://github.com/enjoy-digital/", False, True)),
+    ("litesdcard", ("https://github.com/enjoy-digital/", False, True)),
+    ("liteiclink", ("https://github.com/enjoy-digital/", False, True)),
+    ("litevideo",  ("https://github.com/enjoy-digital/", False, True)),
+    ("litescope",  ("https://github.com/enjoy-digital/", False, True)),
+
+    # LiteX boards support
+    ("litex-boards",   ("https://github.com/litex-hub/", False, True)),
 ]
 repos = OrderedDict(repos)
 

@@ -1,4 +1,5 @@
 # This file is Copyright (c) 2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2018-2019 David Shah <dave@ds0.me>
 # This file is Copyright (c) 2018 William D. Jones <thor0505@comcast.net>
 # License: BSD
 
@@ -137,7 +138,7 @@ class LatticeTrellisToolchain:
         self.yosys_template = [
             "{read_files}",
             "attrmap -tocase keep -imap keep=\"true\" keep=1 -imap keep=\"false\" keep=0 -remove keep=0",
-            "synth_ecp5 -json {build_name}.json -top {build_name}",
+            "synth_ecp5 -abc9 -json {build_name}.json -top {build_name}",
         ]
 
         self.build_template = [

@@ -1,3 +1,7 @@
+# This file is Copyright (c) 2013-2014 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2014-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015 Yann Sionneau <ys@m-labs.hk>
+
 from litex.build.generic_platform import *
 from litex.build.xilinx import XilinxPlatform, VivadoProgrammer
 
@@ -527,7 +531,7 @@ _connectors = [
 
 class Platform(XilinxPlatform):
     default_clk_name = "clk156"
-    default_clk_period = 6.4
+    default_clk_period = 1e9/156.5e6
 
     def __init__(self):
         XilinxPlatform.__init__(self, "xc7k325t-ffg900-2", _io, _connectors, toolchain="vivado")

@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2018-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litex.build.generic_platform import *
@@ -105,7 +105,7 @@ _io = [
 
 class Platform(XilinxPlatform):
     default_clk_name = "clk100"
-    default_clk_period = 10.0
+    default_clk_period = 1e9/100e6
 
     def __init__(self):
         XilinxPlatform.__init__(self, "xc7a100t-CSG324-1", _io, toolchain="vivado")

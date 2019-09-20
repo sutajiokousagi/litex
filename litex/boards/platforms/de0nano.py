@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2013 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2014-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litex.build.generic_platform import *
@@ -96,7 +96,7 @@ _io = [
 
 class Platform(AlteraPlatform):
     default_clk_name = "clk50"
-    default_clk_period = 20
+    default_clk_period = 1e9/50e6
 
     def __init__(self):
         AlteraPlatform.__init__(self, "EP4CE22F17C6", _io)

@@ -1,4 +1,6 @@
-# This file is Copyright (c) 2015 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2017-2018 Sergiusz Bazanski <q3k@q3k.org>
+# This file is Copyright (c) 2017 William D. Jones <thor0505@comcast.net>
 # License: BSD
 
 import os
@@ -7,8 +9,6 @@ import subprocess
 import shutil
 
 from migen.fhdl.structure import _Fragment
-
-from litex.gen.fhdl.verilog import DummyAttrTranslate
 
 from litex.build.generic_platform import *
 from litex.build import tools

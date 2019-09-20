@@ -1,4 +1,5 @@
-# This file is Copyright (c) 2017 Serge 'q3k' Bazanski <serge@bazanski.pl>
+# This file is Copyright (c) 2017 Sergiusz Bazanski <q3k@q3k.org>
+# This file is Copyright (c) 2018-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litex.build.generic_platform import *
@@ -32,6 +33,21 @@ _io = [
     ("serial", 0,
         Subsignal("rx", Pins("C11"), IOStandard("LVCMOS33")),
         Subsignal("tx", Pins("A11"), IOStandard("LVCMOS33")),
+    ),
+
+    ("spiflash", 0, # clock needs to be accessed through USRMCLK
+        Subsignal("cs_n", Pins("R2")),
+        Subsignal("mosi", Pins("W2")),
+        Subsignal("miso", Pins("V2")),
+        Subsignal("wp", Pins("Y2")),
+        Subsignal("hold", Pins("W1")),
+        IOStandard("LVCMOS33"),
+    ),
+
+    ("spiflash4x", 0, # clock needs to be accessed through USRMCLK
+        Subsignal("cs_n", Pins("R2")),
+        Subsignal("dq", Pins("W2 V2 Y2 W1")),
+        IOStandard("LVCMOS33")
     ),
 
     ("ddram", 0,
@@ -180,7 +196,7 @@ _connectors = [
 
 class Platform(LatticePlatform):
     default_clk_name = "clk100"
-    default_clk_period = 10
+    default_clk_period = 1e9/100e6
 
     def __init__(self, **kwargs):
         LatticePlatform.__init__(self, "LFE5UM5G-45F-8BG381C", _io, _connectors, **kwargs)

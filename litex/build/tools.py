@@ -1,3 +1,9 @@
+# This file is Copyright (c) 2013-2015 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2014-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2014 Robert Jordens <jordens@gmail.com>
+# This file is Copyright (c) 2016-2017 Tim 'mithro' Ansell <mithro@mithis.com>
+# License: BSD
+
 import os
 import struct
 from distutils.version import StrictVersion
@@ -22,8 +28,13 @@ def write_to_file(filename, contents, force_unix=False):
     newline = None
     if force_unix:
         newline = "\n"
-    with open(filename, "w", newline=newline) as f:
-        f.write(contents)
+    old_contents = None
+    if os.path.exists(filename):
+        with open(filename, "r", newline=newline) as f:
+            old_contents = f.read()
+    if old_contents != contents:
+        with open(filename, "w", newline=newline) as f:
+            f.write(contents)
 
 
 def arch_bits():

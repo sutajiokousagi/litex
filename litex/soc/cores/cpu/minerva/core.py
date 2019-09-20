@@ -1,3 +1,7 @@
+# This file is Copyright (c) 2018 Jean-François Nguyen <jf@lambdaconcept.fr>
+# This file is Copyright (c) 2018-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
 import os
 
 from migen import *
@@ -18,7 +22,7 @@ class Minerva(Module):
 
     @property
     def gcc_triple(self):
-        return ("riscv64-unknown-elf", "riscv32-unknown-elf")
+        return ("riscv64-unknown-elf", "riscv32-unknown-elf", "riscv-none-embed")
 
     @property
     def gcc_flags(self):

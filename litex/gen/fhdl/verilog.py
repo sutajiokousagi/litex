@@ -1,3 +1,16 @@
+# This file is Copyright (c) 2013-2014 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2013-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2013-2017 Robert Jordens <jordens@gmail.com>
+# This file is Copyright (c) 2016-2018 whitequark <whitequark@whitequark.org>
+# This file is Copyright (c) 2017 Adam Greig <adam@adamgreig.com>
+# This file is Copyright (c) 2016 Ben Reynwar <ben@reynwar.net>
+# This file is Copyright (c) 2018 David Craven <david@craven.ch>
+# This file is Copyright (c) 2015 Guy Hutchison <ghutchis@gmail.com>
+# This file is Copyright (c) 2013 Nina Engelhardt <nina.engelhardt@omnium-gatherum.de>
+# This file is Copyright (c) 2018 Robin Ole Heinemann <robin.ole.heinemann@t-online.de>
+
+# License: BSD
+
 from functools import partial
 from operator import itemgetter
 import collections
@@ -185,11 +198,13 @@ def _printattr(attr, attr_translate):
     firsta = True
     for attr in sorted(attr,
                        key=lambda x: ("", x) if isinstance(x, str) else x):
+        # platform-dependent attribute
         if isinstance(attr, tuple):
-            # platform-dependent attribute
             attr_name, attr_value = attr
+        elif attr not in attr_translate.keys():
+            attr_name, attr_value = attr, None
+        # translated attribute
         else:
-            # translated attribute
             at = attr_translate[attr]
             if at is None:
                 continue
@@ -197,7 +212,9 @@ def _printattr(attr, attr_translate):
         if not firsta:
             r += ", "
         firsta = False
-        r += attr_name + " = \"" + attr_value + "\""
+        r += attr_name
+        if attr_value is not None:
+            r += " = \"" + attr_value + "\""
     if r:
         r = "(* " + r + " *)"
     return r
@@ -353,14 +370,9 @@ def _printspecials(overrides, specials, ns, add_data_file, attr_translate):
     return r
 
 
-class DummyAttrTranslate:
-    def __getitem__(self, k):
-        return (k, "true")
-
-
 def convert(f, ios=None, name="top",
   special_overrides=dict(),
-  attr_translate=DummyAttrTranslate(),
+  attr_translate={},
   create_clock_domains=True,
   display_run=False,
   reg_initialization=True,
